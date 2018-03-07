@@ -1,0 +1,152 @@
+---
+title: "FARS Data Analysis "
+author: "Pradeep S"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+FARS is a nationwide census providing NHTSA, Congress and the American public yearly data regarding fatal injuries suffered in motor vehicle traffic crashes.
+
+
+## Working with FARS
+
+You can leverage this package to plot maps showing the points where accidents have been reported.  
+
+## Getting Started 
+
+This package consists of the following methods. We will describe how these methods are used in the package.
+
+Let's first load the packages.
+
+```{r load-packages, message=FALSE}
+library(readr)
+library(dplyr)
+library(ggplot2)
+```
+
+### fars_read
+
+This function reads a csv file and creates a data frame. This function requires packages - deplyr and readr.If the file name is not present, the function throws errors.
+
+Let us see how this function can be used to load the data.
+
+```{r echo=TRUE, results='markup'}
+fars_read <- function(filename) {
+        if(!file.exists(filename))
+                stop("file '", filename, "' does not exist")
+        data <- suppressMessages({
+                readr::read_csv(filename, progress = FALSE)
+        })
+        dplyr::tbl_df(data)
+}
+
+dat <- fars_read("accident_2013.csv.bz2")
+dat
+```
+
+
+### make_filename
+
+Given a year, this function builds a file name string which can then be used by fars_read function to read the file.
+
+```{r echo=TRUE, results='markup'}
+make_filename <- function(year) {
+        year <- as.integer(year)
+        sprintf("accident_%d.csv.bz2", year)
+}
+
+filename <- make_filename(2013)
+filename
+```
+
+You can see from above that calling this function with 2013 gives you the filename accident_2013.csv.bz2.
+
+### fars_read_years
+
+Given a year or a vector of years this function builds data frame with columns MONTH and "year"
+
+```{r echo=TRUE, results='markup'}
+fars_read_years <- function(years) {
+        lapply(years, function(year) {
+                file <- make_filename(year)
+                tryCatch({
+                        dat <- fars_read(file)
+                        dplyr::mutate(dat, year = year) %>%
+                                dplyr::select(MONTH, year)
+                }, error = function(e) {
+                        warning("invalid year: ", year)
+                        return(NULL)
+                })
+        })
+}
+
+dat <- fars_read_years(2013)
+dat
+```
+
+### fars_summarize_years
+
+This function returns a summary data frame of number of accidents per month for a given vector of years.
+
+```{r echo=TRUE, results='markup'}
+fars_summarize_years <- function(years) {
+        dat_list <- fars_read_years(years)
+        dplyr::bind_rows(dat_list) %>%
+                dplyr::group_by(year, MONTH) %>%
+                dplyr::summarize(n = n()) %>%
+                tidyr::spread(year, n)
+}
+
+dat <- fars_summarize_years(2013)
+dat
+```
+
+You will relalize that the column name itself is now the year in string '2013'.
+
+Note what happens if you call the above function by passing all the three years in a vector.
+
+```{r echo=TRUE, results='markup'}
+dat <- fars_summarize_years(c(2013,2014,2015))
+dat
+```
+
+### fars_map_state
+
+This function plots a map indicating the points where the accidents have been reported. Let us see how this function returns a map for state number 6 and the year 2013.
+
+```{r echo=TRUE, results='markup'}
+fars_map_state <- function(state.num, year) {
+        filename <- make_filename(year)
+        data <- fars_read(filename)
+        state.num <- as.integer(state.num)
+
+        if(!(state.num %in% unique(data$STATE)))
+                stop("invalid STATE number: ", state.num)
+        data.sub <- dplyr::filter(data, STATE == state.num)
+        if(nrow(data.sub) == 0L) {
+                message("no accidents to plot")
+                return(invisible(NULL))
+        }
+        is.na(data.sub$LONGITUD) <- data.sub$LONGITUD > 900
+        is.na(data.sub$LATITUDE) <- data.sub$LATITUDE > 90
+        with(data.sub, {
+                maps::map("state", ylim = range(LATITUDE, na.rm = TRUE),
+                          xlim = range(LONGITUD, na.rm = TRUE))
+                graphics::points(LONGITUD, LATITUDE, pch = 46)
+        })
+}
+
+fars_map_state(6,2013)
+```
+
