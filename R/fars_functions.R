@@ -71,7 +71,7 @@ fars_summarize_years <- function(years) {
 #' @param year Year.
 #' @return A map of the state with the data plotted
 #' @examples
-#' fars_map_state(6,2013) creates a map plot for state number 6 for the year 2013
+#' fars_map_state(6,2013)
 fars_map_state <- function(state.num, year) {
         filename <- make_filename(year)
         data <- fars_read(filename)
